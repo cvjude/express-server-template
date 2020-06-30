@@ -1,0 +1,18 @@
+language: node_js
+node_js:
+  - 'stable'
+cache:
+  directories:
+    - 'node_modules'
+script:
+  - npm test
+  # - npm run coveralls
+env:
+  global:
+    - export NODE_ENV=test
+services:
+  - postgresql
+before_script:
+  - psql -c 'create database paxinfy; ' -U postgres
+# after_success:
+#   - nyc report --reporter=text-lcov | coveralls
