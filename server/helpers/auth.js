@@ -11,9 +11,8 @@ const secret = process.env.APP_SECRET;
  * @returns {string} Generated token
  * @memberof Auth
  */
-export async function generateToken(payload, cb) {
-
-  const token = jwt.sign(payload, secret, cb);
+export async function generateToken(payload, expires) {
+  const token = jwt.sign(payload, secret, expires);
   return token;
 }
 

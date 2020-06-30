@@ -14,8 +14,14 @@ module.exports = (sequelize, DataTypes) => {
       profilePic: DataTypes.STRING,
       emailNotify: DataTypes.BOOLEAN,
       inAppNotify: DataTypes.BOOLEAN,
-      emailVerification: DataTypes.STRING,
-      expiredAt: DataTypes.DATE,
+      verified: DataTypes.BOOLEAN,
+    },
+    {
+      getterMethods: {
+        uuid_slug() {
+          return uuid();
+        },
+      },
     },
     {
       hooks: {
@@ -26,19 +32,11 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-  User.associate = (models) => {
-    // associations can be defined here
-    User.hasOne(models.Organization, {
-      foreignKey: 'ownerId',
-      as: 'owner',
-      cascade: true,
-    });
+  User.beforeCreate((user) => {
+    user.id = uuid();
+  });
 
-    User.hasMany(models.Staff, {
-      foreignKey: 'userId',
-      as: 'staff',
-    });
-  };
+  User.associate = (models) => {};
 
   User.prototype.userResponse = function userResponse() {
     const userData = {

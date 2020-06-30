@@ -5,9 +5,8 @@ module.exports = {
     queryInterface.createTable('Users', {
       id: {
         allowNull: false,
-        autoIncrement: true,
         primaryKey: true,
-        type: Sequelize.INTEGER,
+        type: Sequelize.UUID,
       },
       firstName: {
         type: Sequelize.STRING,
@@ -34,8 +33,9 @@ module.exports = {
         allowNull: true,
       },
       verified: {
-        type: Sequelize.STRING,
+        type: Sequelize.BOOLEAN,
         allowNull: true,
+        defaultValue: false,
       },
       inAppNotify: {
         type: Sequelize.BOOLEAN,
@@ -44,10 +44,6 @@ module.exports = {
       profilePic: {
         type: Sequelize.STRING,
         allowNull: true,
-      },
-      expiredAt: {
-        allowNull: true,
-        type: Sequelize.DATE,
       },
       createdAt: {
         allowNull: false,

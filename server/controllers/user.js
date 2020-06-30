@@ -1,9 +1,8 @@
-import crypto from 'crypto';
 import Sequelize from 'sequelize';
 import models from '../database/models';
 import helpers from '../helpers';
 import Mail from '../services/mail/email';
-import dbRepository from '../helpers/dbRepository';
+import { generateToken, verifyToken } from '../helpers/auth';
 
 const userRepository = new dbRepository(models.User);
 const { successStat, errorStat, comparePassword } = helpers;
@@ -51,15 +50,16 @@ export const signup = async (req, res) => {
 
   if (isUserName) return errorStat(res, 409, 'UserName Already Exist');
 
-  const emailToken = crypto.randomBytes(64).toString('hex');
-
-  const date = new Date().setMinutes(40);
-
   const user = await models.User.create({
     role: 'user',
   });
 
-  const link = `${req.protocol}/${req.headers.host}/api/v1/user/confirm_email?emailToken=${emailToken}&id=${user.dataValues.id}`;
+  const token = generateToken(
+    { id: user.id, email },
+    { expiresIn: 60 * 60 * 24 * 3 }
+  );
+
+  const link = `${req.protocol}/${req.headers.host}/api/v1/user/confirm_email?emailToken=${token}&id=${user.dataValues.id}`;
 
   const mail = new Mail({
     to: email,
@@ -90,7 +90,7 @@ export const signup = async (req, res) => {
  * @memberof UserController
  */
 export const updateUser = async (req, res) => {
-  const { firstName, lastName, userName, bio } = req.body.user;
+  const { userName } = req.body.user;
 
   if (!req.session.user) {
     return errorStat(res, 403, 'Unauthorize Access. Please login.');
@@ -113,12 +113,7 @@ export const updateUser = async (req, res) => {
     }
   }
 
-  await user.update({
-    firstName: firstName || user.firstName,
-    lastName: lastName || user.lastName,
-    inAppNotify: req.body.inAppNotify || user.inAppNotify,
-    emailNotify: req.body.emailNotify || user.emailNotify,
-  });
+  await user.update({ ...req.body.user });
 
   return successStat(res, 200, 'user', { ...user.userResponse() });
 };
@@ -132,35 +127,37 @@ export const updateUser = async (req, res) => {
  */
 
 export const resetPassword = async (req, res) => {
-  let { email } = req.body;
+  let { email } = req.body.user;
 
-  email = email.toLowerCase();
-
-  const findUser = await userRepository.getOne({ email });
+  const findUser = await models.User.findOne({ where: { email } });
 
   if (!findUser) return errorStat(res, 404, 'User does not exist');
 
-  const emailToken = crypto.randomBytes(64).toString('hex');
-
-  const date = new Date().setMinutes(40);
-
-  await userRepository.updateOne(
-    { emailVerification: emailToken, expiredAt: date },
-    { email }
+  const token = generateToken(
+    { id: findUser.id, email },
+    { expiresIn: 60 * 15 }
   );
 
-  const link = `${req.protocol}//${req.headers.host}/api/v1/user/confirm_email?emailToken=${emailToken}&id=${findUser.id}`;
-  await sendEmail(
-    email,
-    'Paxinfy Email Verification',
-    `Please kindly click on the link below to verify your account <br/> ${link}`
-  );
+  const link = `${req.protocol}/${req.headers.host}/api/v1/user/change_password?emailToken=${token}&id=${findUser.id}`;
+
+  const mail = new Mail({
+    to: email,
+    subject: 'Reset Password',
+    messageHeader: `Hi, ${user.firstname}!`,
+    messageBody: 'Please Click on the link below to reset your password',
+    iButton: true,
+  });
+  mail.InitButton({
+    text: 'Reset password',
+    link: link,
+  });
+  mail.sendMail();
 
   return successStat(
     res,
     200,
     'Message',
-    'Resent passord link has been sent to your email, clik link to activate your account'
+    'Reset passord link has been sent to your email, clik link to activate your account'
   );
 };
 
@@ -174,26 +171,23 @@ export const resetPassword = async (req, res) => {
  */
 
 export const changePassword = async (req, res) => {
-  const { emailToken } = req.query;
+  const { emailToken, id, resend } = req.query;
 
   const { password } = req.body;
-  const condition = {
-    emailVerification: emailToken,
-    expiredAt: { [Op.gt]: new Date() },
-  };
 
-  const findUser = await userRepository.getOne(condition);
+  const findUser = await await models.User.findOne({ where: { id } });
 
   if (!findUser) return errorStat(res, 401, 'Password reset unsuccesful');
 
-  await await userRepository.updateOne(
-    {
-      password,
-      emailVerification: null,
-      expiredAt: null,
-    },
-    { emailVerification: emailToken }
-  );
+  try {
+    verifyToken(emailToken);
+  } catch (err) {
+    if (!findUser) return errorStat(res, 401, 'Link expired');
+  }
+
+  await findUser.update({
+    password,
+  });
 
   return successStat(res, 200, 'Message', 'Your password has been changed');
 };
@@ -235,6 +229,7 @@ export const confirmEmail = async (req, res) => {
   try {
     const verify = await verifyToken(token, (err, decoded) => decoded);
     await models.User.update({ verified: true }, { where: { id: verify.id } });
+    res.redirect(200, process.env.FRONTENDURL);
     return successStat(res, 200, 'message', 'Email verified successfully');
   } catch (err) {
     return errorStat(res, 400, 'Unable to verifiy email');
