@@ -229,7 +229,7 @@ export const confirmEmail = async (req, res) => {
   try {
     const verify = await verifyToken(token, (err, decoded) => decoded);
     await models.User.update({ verified: true }, { where: { id: verify.id } });
-    res.redirect(200, process.env.FRONTENDURL);
+    res.redirect(200, process.env.FRONTEND_URL);
     return successStat(res, 200, 'message', 'Email verified successfully');
   } catch (err) {
     return errorStat(res, 400, 'Unable to verifiy email');
